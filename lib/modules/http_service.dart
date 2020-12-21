@@ -80,7 +80,7 @@ class HttpServiceModule {
 
     try {
       var request;
-      if (files.length != 0) {
+      if (files != null && files.length != 0) {
         for (var file in files) {
           request = http.MultipartRequest(
             method,
