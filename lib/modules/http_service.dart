@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 // Handle http request
-class HttpServiceCore {
+class HttpServiceModule {
   String baseUrl;
   int defaultTimeout;
   int maxTimeRetry;
