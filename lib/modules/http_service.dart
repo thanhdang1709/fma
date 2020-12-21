@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 // Handle http request
 class HttpServiceModule {
@@ -9,6 +11,7 @@ class HttpServiceModule {
   int maxTimeRetry;
   Map<String, String> defaultHeaders;
   Map<String, dynamic> defaultBody;
+  List<File> defaultFiles;
 
   defaultFnOnTimeout() {}
   Future interceptorRequest() async {}
@@ -34,6 +37,7 @@ class HttpServiceModule {
     Function onTimeout,
     Map<String, String> headers,
     Map<String, dynamic> body,
+    List<File> files,
   }) async {
     Uri uri = await _getUrl(url, params);
     await interceptorRequest();
@@ -45,6 +49,7 @@ class HttpServiceModule {
       onTimeout: onTimeout ?? defaultFnOnTimeout,
       headers: headers ?? defaultHeaders,
       body: body ?? defaultBody,
+      files: files ?? defaultFiles,
     );
   }
 
@@ -69,17 +74,40 @@ class HttpServiceModule {
     Function onTimeout,
     Map<String, String> headers,
     Map<String, dynamic> body,
+    List<File> files,
   }) async {
     Completer completer = new Completer<Response>();
 
     try {
-      http.Request request = http.Request(method, uri);
+      var request;
+      if (files.length != 0) {
+        for (var file in files) {
+          request = http.MultipartRequest(
+            method,
+            uri,
+          );
+          request.files.add(
+            http.MultipartFile(
+              'image',
+              file.readAsBytes().asStream(),
+              file.lengthSync(),
+              filename: file.path.split("/").last,
+              contentType: MediaType('image', 'jpeg'),
+            ),
+          );
+          request.fields.addAll(body);
+        }
+      } else {
+        request = http.Request(method, uri);
+      }
+      request = http.Request(method, uri);
       headers.addAll(defaultHeaders);
       body.addAll(defaultBody);
       request.headers.addAll(headers);
       request.body = json.encode(body);
-
-      http.StreamedResponse res = await request.send().timeout(Duration(seconds: timeout), onTimeout: () async {
+      http.StreamedResponse res = await request
+          .send()
+          .timeout(Duration(seconds: timeout), onTimeout: () async {
         _currentTimeRetry++;
         onTimeout();
 
@@ -95,7 +123,7 @@ class HttpServiceModule {
           completer.complete(await _handleResponse(response));
         } else {
           var nextTimeRequest = await _handleFetch(
-            method: 'GET',
+            method: method,
             uri: uri,
             timeout: timeout,
             onTimeout: onTimeout,
@@ -123,14 +151,11 @@ class HttpServiceModule {
         response.isMap = false;
         resultBody = responseBodyString;
       }
-
       response.body = resultBody;
-
       completer.complete(await _handleResponse(response));
     } catch (e) {
       print(e);
     }
-
     return completer.future;
   }
 
